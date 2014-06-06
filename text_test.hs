@@ -19,9 +19,10 @@ import qualified FRP.Helm.Time      as Time
 import           FRP.Helm.Utilities ((<~))
 import qualified FRP.Helm.Window    as Window
 import FRP.Elerea.Simple (transfer)
+import FRP.Helm.Color (white)
 
 render :: Time -> Time -> (Int, Int) -> Element
-render dt total_time (w, h) = collage w h [move ((fromIntegral w/2), total_time / 5) $ toForm $ Text.text $ Text.toText ("time " ++ show(dt) ++ " total " ++ show(total_time))]
+render dt total_time (w, h) = collage w h [move ((fromIntegral w/2), total_time / 5) $ toForm $ Text.text $ Text.color white $ Text.header $ Text.toText ("time " ++ show(dt) ++ " total " ++ show(total_time))]
 
 input :: SignalGen (Signal Time)
 input = delay (fps 60)
