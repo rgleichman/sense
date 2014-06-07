@@ -12,6 +12,8 @@ windowWidth = 500
 
 func :: Floating a => a -> a
 func x = 100 * sin (x/40)
+
+gripperWidth = 28 :: Double
 --func x = (- x * 0.5)
 
 zeroedFunc :: Double -> Double
@@ -28,7 +30,14 @@ type Position = Double
 type Angle = Double
 data PosAndVel = PosAndVel {poseX :: Position, poseY::Position, velX::LinearVelocity, velY::LinearVelocity, poseTheta::Angle, velTheta::AngularVelocity}
                  deriving Show
-                          
+
+
+rightSensorPos :: PosAndVel -> (Position, Position)
+rightSensorPos PosAndVel{poseX=x, poseY=y, poseTheta=theta} =
+  (rightX, rightY) where
+    rightX = x + gripperWidth * cos theta
+    rightY = y + gripperWidth * sin theta
+
 --Sensor values (left or senRight) should be true if the sensor is inside an obstacle
 data Sensors = Sensors {senLeft :: Bool, senRight :: Bool} deriving Show
 
@@ -47,16 +56,20 @@ physics t oldGripper@Gripper{gripPosVel=pose}
   = oldGripper{gripPosVel = newPose}
     where      
       newPose = case pose of
-       PosAndVel{poseX=x, poseY=y, velX = x', velY = y'} -> pose{poseX = x + t * x', poseY = min 0 (y - t * y')}
+       PosAndVel{poseX=x, poseY=y, velX = x', velY = y'} -> pose{poseX = x + t * x', poseY = max 0 (y + t * y')}
        
---x1, y1 are the 
-
 updateSensors :: Ord a => t -> a -> t -> a -> (t -> a) -> Sensors
 updateSensors xSenLeft ySenLeft xSenRight ySenRight f =
     Sensors {senLeft = f xSenLeft >= ySenLeft, senRight = f xSenRight >= ySenRight}
 
+-- The gripper position coordinates are in the lower left corner of the gripper
+-- with +x being to the right and +y 90 degrees counterclockwise from +x
 updateGripperSensors :: Gripper -> Gripper
-updateGripperSensors = id
+updateGripperSensors gripper@Gripper{gripPosVel = pose@PosAndVel{poseX=x, poseY=y}} =
+  let (rightX, rightY) = rightSensorPos pose
+      newSensors = updateSensors x y rightX rightY zeroedFunc
+  in 
+   gripper{gripSensors = newSensors}
 
 step :: (Time, (Int, Int)) -> Gripper -> Gripper
 step (t, _)  gripper= updateGripperSensors $ physics t gripper
@@ -64,19 +77,29 @@ step (t, _)  gripper= updateGripperSensors $ physics t gripper
 -- VIEW SECTION
 
 render :: Gripper -> (Int, Int) -> Element
-render Gripper{gripPosVel=PosAndVel{poseX=x, poseY=y}}  (w, h) =
+render Gripper{gripPosVel=pose@PosAndVel{poseX=x, poseY=y, poseTheta=theta}
+              ,gripSensors=Sensors{senLeft=left, senRight=right}}
+  (w, h) =
   collage w h [
-               move (half w, half h) $ filled white $ rect (fromIntegral w) (fromIntegral h), 
-               move (0, fromIntegral h) $ filled green obstacle,
-               move (x, y + fromIntegral h) gripper_shape
+    -- Draw the background
+    move (half w, half h) $ filled white $ rect (fromIntegral w) (fromIntegral h),
+    --Draw the obstacle
+    move (0, fromIntegral h) $ filled green obstacle,
+    --Draw the gripper
+    move (x, windowFrameLeftY) $ rotateCC theta gripper_shape,
+    --Dray the left sensor
+    drawSensor x y left,
+    --Draw the right sensor
+    drawSensor rightX rightY right
               ] 
   where
     half = (/ 2). fromIntegral
     gripper_height = 50 :: Double
-    gripper_width = 28 :: Double
-    gripper_shape = filled red $ triangle gripper_width gripper_height
+    gripper_shape = filled red $ triangle gripperWidth gripper_height
     triangle width height = polygon [(0,0), (width, 0), (width/2, -height)]
-    
+    windowFrameLeftY = (-y) + fromIntegral h
+    (rightX, rightY) = rightSensorPos pose
+    drawSensor xx yy blocked = move (xx, (-yy + fromIntegral h)) $ filled (if blocked then yellow else black) $ circle (gripperWidth / 4)
     
 obstacle :: Shape
 obstacle = funcToShape (floor . zeroedFunc . fromIntegral) (floor windowWidth)
@@ -89,6 +112,10 @@ obstacle = funcToShape (floor . zeroedFunc . fromIntegral) (floor windowWidth)
 --min and max are the range over which the function will be evaluated from 0 to max
 funcToShape :: (Integral a) => (a -> a) -> a -> Shape
 funcToShape f m = polygon $ (0,0):[(fromIntegral x, -(fromIntegral $ f x)) | x <-[0..m]] ++ [(fromIntegral m, 0)]
+
+-- A positive angle will rotate counter clockwise
+rotateCC :: Double -> Form -> Form
+rotateCC angle = rotate (-angle)
 
 -- SIGNALS SECTION
 
@@ -109,7 +136,13 @@ main =
         defaultSensors = Sensors{senLeft=False, senRight=False}
         defaultPosAndVel = PosAndVel{poseX = 0, poseY = 0, velX = 0, velY = 0, poseTheta = 0, velTheta = 0}
       in
-       Gripper{gripPosVel = defaultPosAndVel{poseX = windowWidth / 2, poseY = -200, velX = 0, velY = -10},
+       Gripper{gripPosVel = defaultPosAndVel{
+                  poseX = windowWidth / 2
+                  --,poseX = 0
+                  ,poseY = 150
+                  ,velX = 0
+                  ,velY = -1
+                  ,poseTheta = pi/3},
                gripSensors = defaultSensors}
     stepper = foldp step initialGripper input
     config = defaultConfig{
