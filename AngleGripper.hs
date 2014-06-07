@@ -102,11 +102,12 @@ gripperController oldGripper@Gripper{gripPosVel=oldPose@PosAndVel{poseTheta=thet
      linearSpeed = 1
      angularSpeed = tau/100
      centerSpeed = angularSpeed*gripperWidth/2
-     (linearX, linearY) = (-linearSpeed* sin theta, linearSpeed*cos theta)
+     (linearX, linearY) = (-linearSpeed*sin theta, linearSpeed*cos theta)
+     (angularX, angularY) = (centerSpeed*sin theta, -centerSpeed*cos theta)
      (newX', newY', newTheta') = case (left, right) of
        (False, False) -> (-linearX, -linearY, 0)
-       (True, False) -> (centerSpeed*sin theta, -centerSpeed*cos theta, -angularSpeed)
-       (False, True) -> (-centerSpeed*sin(-theta), -centerSpeed*cos(-theta), angularSpeed)
+       (True, False) -> (angularX, angularY, -angularSpeed)
+       (False, True) -> (angularX, angularY, angularSpeed)
        (True, True) -> (linearX, linearY, 0)
 
    
