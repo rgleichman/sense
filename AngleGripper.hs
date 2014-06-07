@@ -6,6 +6,10 @@ import FRP.Helm.Time
 import qualified FRP.Helm.Window as Window
 import qualified FRP.Helm.Keyboard as Keyboard
 
+-- CONSTANT CONSTANTS (constants that won't change)
+tau :: Double
+tau = pi
+
 -- CONSTANTS (meaning a constant that might change)
 windowWidth :: Double
 windowWidth = 500
@@ -13,7 +17,8 @@ windowWidth = 500
 func :: Floating a => a -> a
 func x = 100 * sin (x/40)
 
-gripperWidth = 28 :: Double
+gripperWidth :: Double
+gripperWidth = 28
 --func x = (- x * 0.5)
 
 zeroedFunc :: Double -> Double
@@ -52,11 +57,11 @@ snapToPositiveZero f lowerBound upperBound =
 
 --TODO: clip x and y such that the gripper does not go off screen
 physics :: Time -> Gripper -> Gripper
-physics t oldGripper@Gripper{gripPosVel=pose}
-  = oldGripper{gripPosVel = newPose}
-    where      
-      newPose = case pose of
-       PosAndVel{poseX=x, poseY=y, velX = x', velY = y'} -> pose{poseX = x + t * x', poseY = max 0 (y + t * y')}
+physics t oldGripper@Gripper{gripPosVel=oldPose@PosAndVel{poseX=x, poseY=y, velX = x', velY = y',poseTheta=theta, velTheta= vTheta}}
+  = oldGripper{gripPosVel = oldPose{poseX = x + t * x'
+                                   ,poseY = max 0 (y + t * y')
+                                   ,poseTheta = theta + t*vTheta
+                                   }}
        
 updateSensors :: Ord a => t -> a -> t -> a -> (t -> a) -> Sensors
 updateSensors xSenLeft ySenLeft xSenRight ySenRight f =
@@ -99,7 +104,7 @@ render Gripper{gripPosVel=pose@PosAndVel{poseX=x, poseY=y, poseTheta=theta}
     triangle width height = polygon [(0,0), (width, 0), (width/2, -height)]
     windowFrameLeftY = (-y) + fromIntegral h
     (rightX, rightY) = rightSensorPos pose
-    drawSensor xx yy blocked = move (xx, (-yy + fromIntegral h)) $ filled (if blocked then yellow else black) $ circle (gripperWidth / 4)
+    drawSensor xx yy blocked = move (xx, -yy + fromIntegral h) $ filled (if blocked then yellow else black) $ circle (gripperWidth / 4)
     
 obstacle :: Shape
 obstacle = funcToShape (floor . zeroedFunc . fromIntegral) (floor windowWidth)
@@ -141,8 +146,10 @@ main =
                   --,poseX = 0
                   ,poseY = 150
                   ,velX = 0
-                  ,velY = -1
-                  ,poseTheta = pi/3},
+                  ,velY = 0
+                  ,poseTheta = tau/6
+                  ,velTheta = tau/100
+                  },
                gripSensors = defaultSensors}
     stepper = foldp step initialGripper input
     config = defaultConfig{
