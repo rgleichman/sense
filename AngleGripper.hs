@@ -14,6 +14,9 @@ tau = pi
 windowWidth :: Double
 windowWidth = 500
 
+windowHeight :: Double
+windowHeight = 500 
+
 func :: Floating a => a -> a
 func x = 100 * sin (x/40)
 
@@ -55,11 +58,16 @@ snapToPositiveZero f lowerBound upperBound =
 
 -- UPDATE SECTION
 
+-- clamps the value between bottom and top
+-- if bottom > top then return bottom
+clamp :: Ord a => a -> a -> a -> a
+clamp bottom top value = max bottom $ min top value
+
 --TODO: clip x and y such that the gripper does not go off screen
 physics :: Time -> Gripper -> Gripper
 physics t oldGripper@Gripper{gripPosVel=oldPose@PosAndVel{poseX=x, poseY=y, velX = x', velY = y',poseTheta=theta, velTheta= vTheta}}
-  = oldGripper{gripPosVel = oldPose{poseX = x + t * x'
-                                   ,poseY = max 0 (y + t * y')
+  = oldGripper{gripPosVel = oldPose{poseX = clamp 0 windowWidth (x + t * x')
+                                   ,poseY = clamp 0 windowHeight (y + t * y')
                                    ,poseTheta = theta + t*vTheta
                                    }}
        
@@ -82,7 +90,7 @@ step (t, _)  gripper= updateGripperSensors $ physics t gripper
 -- VIEW SECTION
 
 render :: Gripper -> (Int, Int) -> Element
-render Gripper{gripPosVel=pose@PosAndVel{poseX=x, poseY=y, poseTheta=theta}
+render Gripper{gripPosVel=PosAndVel{poseX=x, poseY=y, poseTheta=theta}
               ,gripSensors=Sensors{senLeft=left, senRight=right}}
   (w, h) =
   collage w h [
@@ -91,20 +99,20 @@ render Gripper{gripPosVel=pose@PosAndVel{poseX=x, poseY=y, poseTheta=theta}
     --Draw the obstacle
     move (0, fromIntegral h) $ filled green obstacle,
     --Draw the gripper
-    move (x, windowFrameLeftY) $ rotateCC theta gripper_shape,
-    --Dray the left sensor
-    drawSensor x y left,
-    --Draw the right sensor
-    drawSensor rightX rightY right
-              ] 
+    move (x, (-y) + fromIntegral h) $ rotateCC theta $ group [
+      gripper_shape,
+      --Dray the left sensor
+      drawSensor 0 0 left,
+      --Draw the right sensor
+      drawSensor gripperWidth 0 right
+      ]
+    ] 
   where
     half = (/ 2). fromIntegral
     gripper_height = 50 :: Double
     gripper_shape = filled red $ triangle gripperWidth gripper_height
     triangle width height = polygon [(0,0), (width, 0), (width/2, -height)]
-    windowFrameLeftY = (-y) + fromIntegral h
-    (rightX, rightY) = rightSensorPos pose
-    drawSensor xx yy blocked = move (xx, -yy + fromIntegral h) $ filled (if blocked then yellow else black) $ circle (gripperWidth / 4)
+    drawSensor xx yy blocked = move (xx, -yy) $ outlined  (solid (if blocked then yellow else black)){lineWidth=gripperWidth/8} $ circle (gripperWidth / 4)
     
 obstacle :: Shape
 obstacle = funcToShape (floor . zeroedFunc . fromIntegral) (floor windowWidth)
@@ -135,7 +143,7 @@ main :: IO ()
 main =
     run config $ render <~ stepper ~~ Window.dimensions
   where
-    window_height = 500 :: Double
+
     initialGripper =
       let
         defaultSensors = Sensors{senLeft=False, senRight=False}
@@ -143,15 +151,16 @@ main =
       in
        Gripper{gripPosVel = defaultPosAndVel{
                   poseX = windowWidth / 2
-                  --,poseX = 0
+                  --poseX = 0
                   ,poseY = 150
-                  ,velX = 0
-                  ,velY = 0
-                  ,poseTheta = tau/6
+                  ,velX = 0.5
+                  ,velY = -0.1
+                  ,poseTheta = 0
                   ,velTheta = tau/100
+                  --,velTheta = 0                              
                   },
                gripSensors = defaultSensors}
     stepper = foldp step initialGripper input
     config = defaultConfig{
-               windowDimensions = (floor windowWidth, floor window_height),
+               windowDimensions = (floor windowWidth, floor windowHeight),
                windowIsResizable = False}
