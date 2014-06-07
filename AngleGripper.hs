@@ -11,21 +11,22 @@ tau :: Double
 tau = pi
 
 -- CONSTANTS (meaning a constant that might change)
-windowWidth :: Double
+windowWidth :: (Num a) => a
 windowWidth = 500
 
-windowHeight :: Double
+windowHeight :: (Num a) => a
 windowHeight = 500 
 
 func :: Floating a => a -> a
 func x = 100 * sin (x/40)
 
-gripperWidth :: Double
+gripperWidth :: (Num a) => a
 gripperWidth = 28
 --func x = (- x * 0.5)
 
 zeroedFunc :: Double -> Double
 zeroedFunc = snapToPositiveZero func 0 windowWidth
+
 -- MODEL SECTION
 
 -- Gripper x y are the x and y coordinates of the gripper.
@@ -64,10 +65,10 @@ clamp :: Ord a => a -> a -> a -> a
 clamp bottom top value = max bottom $ min top value
 
 --TODO: clip x and y such that the gripper does not go off screen
-physics :: Time -> Gripper -> Gripper
-physics t oldGripper@Gripper{gripPosVel=oldPose@PosAndVel{poseX=x, poseY=y, velX = x', velY = y',poseTheta=theta, velTheta= vTheta}}
-  = oldGripper{gripPosVel = oldPose{poseX = clamp 0 windowWidth (x + t * x')
-                                   ,poseY = clamp 0 windowHeight (y + t * y')
+physics :: Time -> (Int, Int) -> Gripper -> Gripper
+physics t (width, height) oldGripper@Gripper{gripPosVel=oldPose@PosAndVel{poseX=x, poseY=y, velX = x', velY = y',poseTheta=theta, velTheta= vTheta}}
+  = oldGripper{gripPosVel = oldPose{poseX = clamp 0 (fromIntegral width) (x + t * x')
+                                   ,poseY = clamp 0 (fromIntegral height) (y + t * y')
                                    ,poseTheta = theta + t*vTheta
                                    }}
        
@@ -84,8 +85,8 @@ updateGripperSensors gripper@Gripper{gripPosVel = pose@PosAndVel{poseX=x, poseY=
   in 
    gripper{gripSensors = newSensors}
 
-step :: (Time, (Int, Int)) -> Gripper -> Gripper
-step (t, _)  gripper= updateGripperSensors $ physics t gripper
+step :: (Time, t, (Int, Int)) -> Gripper -> Gripper
+step (t, _, windowDim)  gripper = updateGripperSensors $ physics t windowDim gripper
 
 -- VIEW SECTION
 
@@ -115,7 +116,7 @@ render Gripper{gripPosVel=PosAndVel{poseX=x, poseY=y, poseTheta=theta}
     drawSensor xx yy blocked = move (xx, -yy) $ outlined  (solid (if blocked then yellow else black)){lineWidth=gripperWidth/8} $ circle (gripperWidth / 4)
     
 obstacle :: Shape
-obstacle = funcToShape (floor . zeroedFunc . fromIntegral) (floor windowWidth)
+obstacle = funcToShape zeroedFunc windowWidth
 
 --render (Gripper mX1 mY1 _ _ ) (w, h) =
 --  centeredCollage w h [filled green $ funcToShape (*2) w]
@@ -123,8 +124,9 @@ obstacle = funcToShape (floor . zeroedFunc . fromIntegral) (floor windowWidth)
 --TODO shift the function up so that the function does not need to have positive values
 --Takes a simple function from Integrals to Integrals and produces a shape
 --min and max are the range over which the function will be evaluated from 0 to max
-funcToShape :: (Integral a) => (a -> a) -> a -> Shape
-funcToShape f m = polygon $ (0,0):[(fromIntegral x, -(fromIntegral $ f x)) | x <-[0..m]] ++ [(fromIntegral m, 0)]
+
+funcToShape :: (Double -> Double) -> Double -> Shape
+funcToShape f m = polygon $ (0,0):[(x, -(f x)) | x <-[0..m]] ++ [(m, 0)]
 
 -- A positive angle will rotate counter clockwise
 rotateCC :: Double -> Form -> Form
@@ -132,8 +134,9 @@ rotateCC angle = rotate (-angle)
 
 -- SIGNALS SECTION
 
-input :: El.SignalGen (El.Signal (Time, (Int, Int)))
-input = lift2 (,) delta' Keyboard.arrows
+
+input :: El.SignalGen (El.Signal (Time, (Int, Int), (Int, Int)))
+input = lift3 (\x y z -> (x,y,z)) delta' Keyboard.arrows Window.dimensions
   where
     delta' = lift (/15) $ delay $ fps 60
 
@@ -162,5 +165,5 @@ main =
                gripSensors = defaultSensors}
     stepper = foldp step initialGripper input
     config = defaultConfig{
-               windowDimensions = (floor windowWidth, floor windowHeight),
+               windowDimensions = (windowWidth, windowHeight),
                windowIsResizable = False}
