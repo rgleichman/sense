@@ -17,8 +17,9 @@ windowWidth = 500
 windowHeight :: (Num a) => a
 windowHeight = 500 
 
-func :: Floating a => a -> a
-func x = 100 * sin (x/40)
+
+func :: Double -> Double
+func x = 100 * sin (tau * x/40)
 
 gripperWidth :: (Num a) => a
 gripperWidth = 28
@@ -85,10 +86,20 @@ updateGripperSensors gripper@Gripper{gripPosVel = pose@PosAndVel{poseX=x, poseY=
   in 
    gripper{gripSensors = newSensors}
 
-step :: (Time, t, (Int, Int)) -> Gripper -> Gripper
-step (t, _, windowDim)  gripper = updateGripperSensors $ physics t windowDim gripper
+--Will control the gripper to align with obstacles
+gripperController :: Gripper -> Gripper
+gripperController oldGripper@Gripper{gripPosVel=oldPose@PosAndVel{poseX=x, poseY=y, velX = x', velY = y',poseTheta=theta, velTheta= vTheta},
+                                     gripSensors = sense@Sensors{senLeft = left, senRight = right}} =
+   oldGripper{gripPosVel = oldPose{velX = 0
+                                  ,velY = (if left then 1 else -1)
+                                  ,velTheta = (if right then tau/100 else (if left then -tau/100 else 0))
+                                  }}
 
--- VIEW SECTION
+   
+step :: (Time, t1, (Int, Int)) -> Gripper -> Gripper
+step (t, _, windowDim)  gripper = physics t windowDim $ gripperController $ updateGripperSensors gripper
+
+-- view SECTION
 
 render :: Gripper -> (Int, Int) -> Element
 render Gripper{gripPosVel=PosAndVel{poseX=x, poseY=y, poseTheta=theta}
@@ -153,14 +164,14 @@ main =
         defaultPosAndVel = PosAndVel{poseX = 0, poseY = 0, velX = 0, velY = 0, poseTheta = 0, velTheta = 0}
       in
        Gripper{gripPosVel = defaultPosAndVel{
-                  poseX = windowWidth / 2
-                  --poseX = 0
-                  ,poseY = 150
+                  --poseX = windowWidth / 2
+                  poseX = 47
+                  ,poseY = 200
                   ,velX = 0.5
                   ,velY = -0.1
                   ,poseTheta = 0
-                  ,velTheta = tau/100
-                  --,velTheta = 0                              
+                  --,velTheta = tau/100
+                  ,velTheta = 0                              
                   },
                gripSensors = defaultSensors}
     stepper = foldp step initialGripper input
