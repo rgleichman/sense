@@ -42,11 +42,15 @@ data PosAndVel = PosAndVel {poseX :: Position, poseY::Position, velX::LinearVelo
                  deriving Show
 
 
-rightSensorPos :: PosAndVel -> (Position, Position)
-rightSensorPos PosAndVel{poseX=x, poseY=y, poseTheta=theta} =
-  (rightX, rightY) where
-    rightX = x + gripperWidth * cos theta
-    rightY = y + gripperWidth * sin theta
+sensorPose :: PosAndVel -> (Position, Position, Position, Position)
+sensorPose PosAndVel{poseX=x, poseY=y, poseTheta=theta} =
+  (leftX, leftY, rightX, rightY) where
+    xVec = gripperWidth/2 * cos theta
+    yVec = gripperWidth/2 * sin theta
+    rightX = x + xVec
+    rightY = y + yVec
+    leftX = x - xVec
+    leftY = y - yVec
 
 --Sensor values (left or senRight) should be true if the sensor is inside an obstacle
 data Sensors = Sensors {senLeft :: Bool, senRight :: Bool} deriving Show
@@ -80,20 +84,29 @@ updateSensors xSenLeft ySenLeft xSenRight ySenRight f =
 -- The gripper position coordinates are in the lower left corner of the gripper
 -- with +x being to the right and +y 90 degrees counterclockwise from +x
 updateGripperSensors :: Gripper -> Gripper
-updateGripperSensors gripper@Gripper{gripPosVel = pose@PosAndVel{poseX=x, poseY=y}} =
-  let (rightX, rightY) = rightSensorPos pose
-      newSensors = updateSensors x y rightX rightY zeroedFunc
+updateGripperSensors gripper@Gripper{gripPosVel = pose} =
+  let (leftX, leftY, rightX, rightY) = sensorPose pose
+      newSensors = updateSensors leftX leftY rightX rightY zeroedFunc
   in 
    gripper{gripSensors = newSensors}
 
 --Will control the gripper to align with obstacles
 gripperController :: Gripper -> Gripper
-gripperController oldGripper@Gripper{gripPosVel=oldPose@PosAndVel{poseX=x, poseY=y, velX = x', velY = y',poseTheta=theta, velTheta= vTheta},
-                                     gripSensors = sense@Sensors{senLeft = left, senRight = right}} =
-   oldGripper{gripPosVel = oldPose{velX = 0
-                                  ,velY = (if left then 1 else -1)
-                                  ,velTheta = (if right then tau/100 else (if left then -tau/100 else 0))
+gripperController oldGripper@Gripper{gripPosVel=oldPose@PosAndVel{poseTheta=theta},
+                                     gripSensors = Sensors{senLeft = left, senRight = right}} =
+   oldGripper{gripPosVel = oldPose{velX = newX'
+                                  ,velY = newY'
+                                  ,velTheta = newTheta'
                                   }}
+   where
+     linearSpeed = 1
+     angularSpeed = tau/100
+     centerSpeed = angularSpeed*gripperWidth/2
+     (newX', newY', newTheta') = case (left, right) of
+       (False, False) -> (0, -linearSpeed, 0)
+       (True, False) -> (centerSpeed*sin(theta), -centerSpeed*cos(theta), -angularSpeed)
+       (False, True) -> (-centerSpeed*sin(-theta), -centerSpeed*cos(-theta), angularSpeed)
+       (True, True) -> (0, linearSpeed, 0)
 
    
 step :: (Time, t1, (Int, Int)) -> Gripper -> Gripper
@@ -114,16 +127,16 @@ render Gripper{gripPosVel=PosAndVel{poseX=x, poseY=y, poseTheta=theta}
     move (x, (-y) + fromIntegral h) $ rotateCC theta $ group [
       gripper_shape,
       --Dray the left sensor
-      drawSensor 0 0 left,
+      drawSensor (-gripperWidth/2) 0 left,
       --Draw the right sensor
-      drawSensor gripperWidth 0 right
+      drawSensor (gripperWidth/2) 0 right
       ]
     ] 
   where
     half = (/ 2). fromIntegral
     gripper_height = 50 :: Double
     gripper_shape = filled red $ triangle gripperWidth gripper_height
-    triangle width height = polygon [(0,0), (width, 0), (width/2, -height)]
+    triangle width height = polygon [(-width/2,0), (width/2, 0), (0, -height)]
     drawSensor xx yy blocked = move (xx, -yy) $ outlined  (solid (if blocked then yellow else black)){lineWidth=gripperWidth/8} $ circle (gripperWidth / 4)
     
 obstacle :: Shape
@@ -165,10 +178,12 @@ main =
       in
        Gripper{gripPosVel = defaultPosAndVel{
                   --poseX = windowWidth / 2
-                  poseX = 47
-                  ,poseY = 200
-                  ,velX = 0.5
-                  ,velY = -0.1
+                  poseX = 120
+                  ,poseY = 300
+                  --,velX = 0.5
+                  ,velX = 0
+                  --,velY = -0.1
+                  ,velY = 0
                   ,poseTheta = 0
                   --,velTheta = tau/100
                   ,velTheta = 0                              
