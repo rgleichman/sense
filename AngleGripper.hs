@@ -102,11 +102,12 @@ gripperController oldGripper@Gripper{gripPosVel=oldPose@PosAndVel{poseTheta=thet
      linearSpeed = 1
      angularSpeed = tau/100
      centerSpeed = angularSpeed*gripperWidth/2
+     (linearX, linearY) = (-linearSpeed* sin theta, linearSpeed*cos theta)
      (newX', newY', newTheta') = case (left, right) of
-       (False, False) -> (0, -linearSpeed, 0)
-       (True, False) -> (centerSpeed*sin(theta), -centerSpeed*cos(theta), -angularSpeed)
+       (False, False) -> (-linearX, -linearY, 0)
+       (True, False) -> (centerSpeed*sin theta, -centerSpeed*cos theta, -angularSpeed)
        (False, True) -> (-centerSpeed*sin(-theta), -centerSpeed*cos(-theta), angularSpeed)
-       (True, True) -> (0, linearSpeed, 0)
+       (True, True) -> (linearX, linearY, 0)
 
    
 step :: (Time, t1, (Int, Int)) -> Gripper -> Gripper
@@ -178,12 +179,13 @@ main =
       in
        Gripper{gripPosVel = defaultPosAndVel{
                   --poseX = windowWidth / 2
-                  poseX = 120
-                  ,poseY = 300
+                  poseX = 90
+                  ,poseY = 250
                   --,velX = 0.5
                   ,velX = 0
                   --,velY = -0.1
                   ,velY = 0
+                  --,poseTheta = tau/12
                   ,poseTheta = 0
                   --,velTheta = tau/100
                   ,velTheta = 0                              
