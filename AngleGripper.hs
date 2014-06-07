@@ -1,3 +1,4 @@
+module AngleGripper where
 import Prelude hiding (Either(..))
 import qualified FRP.Elerea.Simple as El hiding (delay)
 import FRP.Helm
@@ -10,19 +11,26 @@ windowWidth :: Double
 windowWidth = 500
 
 func :: Floating a => a -> a
-func x = 100*(sin (x/40))
+func x = 100 * sin (x/40)
 --func x = (- x * 0.5)
 
 zeroedFunc :: Double -> Double
-zeroedFunc = (snapToPositiveZero func) 0 windowWidth
+zeroedFunc = snapToPositiveZero func 0 windowWidth
 -- MODEL SECTION
 
 -- Gripper x y are the x and y coordinates of the gripper.
--- The bottom left corner of the window is (0,0) with positive being up and right
-data Gripper = Gripper {gripX :: Double, gripY::Double, gripX'::Double, gripY'::Double} deriving Show
+-- The bottom left corner of the window is (0,0) with positive being up and senRight
+data Gripper = Gripper {gripPosVel :: PosAndVel, gripSensors::Sensors} deriving Show
 
---Sensor values (left or right) should be true if the sensor is inside an obstacle
-data Sensors = Sensors {left :: Bool, right :: Bool} deriving Show
+type LinearVelocity = Double
+type AngularVelocity = Double
+type Position = Double
+type Angle = Double
+data PosAndVel = PosAndVel {poseX :: Position, poseY::Position, velX::LinearVelocity, velY::LinearVelocity, poseTheta::Angle, velTheta::AngularVelocity}
+                 deriving Show
+                          
+--Sensor values (left or senRight) should be true if the sensor is inside an obstacle
+data Sensors = Sensors {senLeft :: Bool, senRight :: Bool} deriving Show
 
 --evaluats f in the domain [lowerBound, upperBonud] and makes sure that
 -- the outupt function is >= 0 and its minimum value within the domain is 0
@@ -33,33 +41,40 @@ snapToPositiveZero f lowerBound upperBound =
 
 -- UPDATE SECTION
 
+--TODO: clip x and y such that the gripper does not go off screen
 physics :: Time -> Gripper -> Gripper
-physics t (Gripper mX mY vX vY)
-  = Gripper (mX + t * vX) (min 0 (mY - t * vY)) vX vY
-
+physics t oldGripper@Gripper{gripPosVel=pose}
+  = oldGripper{gripPosVel = newPose}
+    where      
+      newPose = case pose of
+       PosAndVel{poseX=x, poseY=y, velX = x', velY = y'} -> pose{poseX = x + t * x', poseY = min 0 (y - t * y')}
+       
 --x1, y1 are the 
 
 updateSensors :: Ord a => t -> a -> t -> a -> (t -> a) -> Sensors
-updateSensors xLeft yLeft xRight yRight f =
-    Sensors {left = f xLeft >= yLeft, right = f xRight >= yRight}
+updateSensors xSenLeft ySenLeft xSenRight ySenRight f =
+    Sensors {senLeft = f xSenLeft >= ySenLeft, senRight = f xSenRight >= ySenRight}
+
+updateGripperSensors :: Gripper -> Gripper
+updateGripperSensors = id
 
 step :: (Time, (Int, Int)) -> Gripper -> Gripper
-step (t, _) = physics t
+step (t, _)  gripper= updateGripperSensors $ physics t gripper
 
 -- VIEW SECTION
 
 render :: Gripper -> (Int, Int) -> Element
-render (Gripper mX1 mY1 _ _ ) (w, h) =
+render Gripper{gripPosVel=PosAndVel{poseX=x, poseY=y}}  (w, h) =
   collage w h [
                move (half w, half h) $ filled white $ rect (fromIntegral w) (fromIntegral h), 
                move (0, fromIntegral h) $ filled green obstacle,
-               move (mX1, mY1 + fromIntegral h) mario_shape
+               move (x, y + fromIntegral h) gripper_shape
               ] 
   where
     half = (/ 2). fromIntegral
-    mario_height = 50 :: Double
-    mario_width = 28 :: Double
-    mario_shape = filled red $ triangle mario_width mario_height
+    gripper_height = 50 :: Double
+    gripper_width = 28 :: Double
+    gripper_shape = filled red $ triangle gripper_width gripper_height
     triangle width height = polygon [(0,0), (width, 0), (width/2, -height)]
     
     
@@ -87,12 +102,16 @@ input = lift2 (,) delta' Keyboard.arrows
 main :: IO ()
 main =
     run config $ render <~ stepper ~~ Window.dimensions
-
   where
-
     window_height = 500 :: Double
-    mario = Gripper (windowWidth / 2) (-200) 0 (-10)
-    stepper = foldp step mario input
+    initialGripper =
+      let
+        defaultSensors = Sensors{senLeft=False, senRight=False}
+        defaultPosAndVel = PosAndVel{poseX = 0, poseY = 0, velX = 0, velY = 0, poseTheta = 0, velTheta = 0}
+      in
+       Gripper{gripPosVel = defaultPosAndVel{poseX = windowWidth / 2, poseY = -200, velX = 0, velY = -10},
+               gripSensors = defaultSensors}
+    stepper = foldp step initialGripper input
     config = defaultConfig{
                windowDimensions = (floor windowWidth, floor window_height),
                windowIsResizable = False}
