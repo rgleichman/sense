@@ -73,7 +73,8 @@ physics t (width, height) oldGripper@Gripper{gripPosVel=oldPose@PosAndVel{poseX=
   = oldGripper{gripPosVel = oldPose{poseX = clamp 0 (fromIntegral width) (x + (deltaSeconds * x'))
                                    ,poseY = clamp 0 (fromIntegral height) (y + (deltaSeconds * y'))
                                    ,poseTheta = theta + (deltaSeconds*vTheta)
-                                   }}
+                                   }
+              }    
     where deltaSeconds = inSeconds t
        
 updateSensors :: Ord a => t -> a -> t -> a -> (t -> a) -> Sensors
@@ -90,16 +91,17 @@ updateGripperSensors gripper@Gripper{gripPosVel = pose} =
    gripper{gripSensors = newSensors}
 
 --Controls the gripper to align to obstacles
-gripperController :: Gripper -> Gripper
-gripperController oldGripper@Gripper{gripPosVel=oldPose@PosAndVel{poseTheta=theta},
-                                     gripSensors = Sensors{senLeft = left, senRight = right}} =
-   oldGripper{gripPosVel = oldPose{velX = newX'
+
+gripperController :: (LinearVelocity, AngularVelocity) -> Gripper -> Gripper
+gripperController (linearSpeed, angularSpeed) oldGripper@Gripper{gripPosVel=oldPose@PosAndVel{poseTheta=theta},
+                                                                 gripSensors = Sensors{senLeft = left, senRight = right}
+                                                                }
+  = oldGripper{gripPosVel = oldPose{velX = newX'
                                   ,velY = newY'
                                   ,velTheta = newTheta'
-                                  }}
+                                  }
+              }
    where
-     linearSpeed = 100
-     angularSpeed = tau/2
      centerSpeed = angularSpeed*gripperWidth/2
      relativeToAbsCoords relX relY = ((relX*cos theta) - (relY*sin theta),
                                             (relY*cos theta) + (relX*sin theta))
@@ -109,12 +111,13 @@ gripperController oldGripper@Gripper{gripPosVel=oldPose@PosAndVel{poseTheta=thet
        (False, True) -> (relativeToAbsCoords 0 (-centerSpeed), angularSpeed)
        (True, True) -> (relativeToAbsCoords 0 linearSpeed, 0)
 
-addVelocityNoise :: LinearVelocity -> Gripper -> Gripper
-addVelocityNoise rand oldGripper@Gripper{gripPosVel=oldPose@PosAndVel{velX=vX, velY = vY, velTheta=vT}}
+
+addVelocityNoise :: RealFrac a => a -> (LinearVelocity, AngularVelocity) -> Gripper -> Gripper
+addVelocityNoise rand (linearNoise, angularNoise) oldGripper@Gripper{gripPosVel=oldPose@PosAndVel{velX=vX, velY = vY, velTheta=vT}}
   =
-   oldGripper{gripPosVel = oldPose{velX = vX + 100*rand1
-                                  ,velY = vY + 100*rand2
-                                  ,velTheta=vT+ (tau/2)*rand3
+   oldGripper{gripPosVel = oldPose{velX = vX + linearNoise*rand1
+                                  ,velY = vY + linearNoise*rand2
+                                  ,velTheta=vT+ angularNoise*rand3
                                   }}
    where
      [rand1, rand2, rand3] = take 3 $ Rand.randomRs (-1, 1) (Rand.mkStdGen $ floor $ 1000*rand)::[Double]
@@ -122,9 +125,14 @@ addVelocityNoise rand oldGripper@Gripper{gripPosVel=oldPose@PosAndVel{velX=vX, v
 
 step :: (Time, t1, (Int, Int), Double) -> Gripper -> Gripper
 step (t, _, windowDim, rand)  gripper = physics t windowDim $
-                                  addVelocityNoise rand $
-                                  gripperController $
+                                  addVelocityNoise rand (linearNoise, angularNoise)$
+                                  gripperController (linearSpeed, angularSpeed) $
                                   updateGripperSensors gripper
+  where
+    linearSpeed = 100 --pixes/second
+    angularSpeed = tau/2 --radians/second
+    linearNoise = linearSpeed --Uniform [-linearNoise, linearNoise]
+    angularNoise = angularSpeed --Uniform [-angularSpeed, angularSpeed]
 
 -- view SECTION
 
@@ -156,13 +164,8 @@ render Gripper{gripPosVel=PosAndVel{poseX=x, poseY=y, poseTheta=theta}
 obstacle :: Shape
 obstacle = funcToShape zeroedFunc windowWidth
 
---render (Gripper mX1 mY1 _ _ ) (w, h) =
---  centeredCollage w h [filled green $ funcToShape (*2) w]
-
---TODO shift the function up so that the function does not need to have positive values
 --Takes a simple function from Integrals to Integrals and produces a shape
 --min and max are the range over which the function will be evaluated from 0 to max
-
 funcToShape :: (Double -> Double) -> Double -> Shape
 funcToShape f m = polygon $ (0,0):[(x, -(f x)) | x <-[0..m]] ++ [(m, 0)]
 
@@ -171,8 +174,6 @@ rotateCC :: Double -> Form -> Form
 rotateCC angle = rotate (-angle)
 
 -- SIGNALS SECTION
-
-
 
 input :: El.SignalGen (El.Signal (Time, (Int, Int), (Int, Int), Double))
 input = lift4 (\x y z w-> (x,y,z,w)) delta' Keyboard.arrows Window.dimensions (randomR (-1, 1))
@@ -185,22 +186,18 @@ main :: IO ()
 main =
     run config $ render <~ stepper ~~ Window.dimensions
   where
-
     initialGripper =
       let
         defaultSensors = Sensors{senLeft=False, senRight=False}
         defaultPosAndVel = PosAndVel{poseX = 0, poseY = 0, velX = 0, velY = 0, poseTheta = 0, velTheta = 0}
       in
        Gripper{gripPosVel = defaultPosAndVel{
-                  --poseX = windowWidth / 2
                   poseX = 120
-                  ,poseY = 240
+                  ,poseY = 400
                   --,velX = 0.5
-                  ,velX = 0
                   --,velY = -0.1
                   ,velY = -100
                   --,poseTheta = tau/12
-                  --,poseTheta = 0
                   --,velTheta = tau/100
                   ,velTheta = 0                              
                   },
