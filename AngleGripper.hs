@@ -30,7 +30,7 @@ zeroedFunc = snapToPositiveZero func 0 windowWidth
 
 -- Gripper x y are the x and y coordinates of the gripper.
 -- The bottom left corner of the window is (0,0) with positive being up and senRight
-data Gripper = Gripper {gripPosVel :: PosAndVel, gripSensors::Sensors} deriving Show
+data Gripper = Gripper {gripPosVel :: PosAndVel, gripSensors::Sensors, gripRands::[Double]} deriving Show
 
 type LinearVelocity = Double
 type AngularVelocity = Double
@@ -118,11 +118,19 @@ addVelocityNoise rand (linearNoise, angularNoise) oldGripper@Gripper{gripPosVel=
    oldGripper{gripPosVel = oldPose{velX = vX + linearNoise*rand1
                                   ,velY = vY + linearNoise*rand2
                                   ,velTheta=vT+ angularNoise*rand3
-                                  }}
+                                  }
+             ,gripRands = rands
+             }
    where
-     [rand1, rand2, rand3] = take 3 $ Rand.randomRs (-1, 1) (Rand.mkStdGen $ floor $ 1000*rand)::[Double]
+     rands@[rand1, rand2, rand3] = take 3 $ Rand.randomRs (-1, 1) (Rand.mkStdGen $ floor $ 1000*rand)::[Double]
 
-
+randomRanges :: (Rand.RandomGen b, Rand.Random a) => [(a, a)] -> b -> [a]
+randomRanges ranges gen = fst $ foldr foldFunc ([], gen) ranges
+                          where
+                            foldFunc (low, high) (results, fGen) = (randNum:results, newGen)
+                              where
+                                  (randNum, newGen) = Rand.randomR (low, high) fGen
+                                  
 step :: (Time, t1, (Int, Int), Double) -> Gripper -> Gripper
 step (t, _, windowDim, rand)  gripper = physics t windowDim $
                                   addVelocityNoise rand (linearNoise, angularNoise)$
