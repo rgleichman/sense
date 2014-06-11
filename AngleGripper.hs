@@ -113,7 +113,10 @@ gripperController (linearSpeed, angularSpeed) oldGripper@Gripper{gripPosVel=oldP
 
 
 addVelocityNoise :: RealFrac a => a -> (LinearVelocity, AngularVelocity) -> Gripper -> Gripper
-addVelocityNoise rand (linearNoise, angularNoise) oldGripper@Gripper{gripPosVel=oldPose@PosAndVel{velX=vX, velY = vY, velTheta=vT}}
+addVelocityNoise rand (linearNoise, angularNoise) oldGripper@Gripper{
+  gripPosVel=oldPose@PosAndVel{velX=vX, velY = vY, velTheta=vT}
+  , gripRands = oldRands
+  }
   =
    oldGripper{gripPosVel = oldPose{velX = vX + linearNoise*rand1
                                   ,velY = vY + linearNoise*rand2
@@ -122,8 +125,8 @@ addVelocityNoise rand (linearNoise, angularNoise) oldGripper@Gripper{gripPosVel=
              ,gripRands = rands
              }
    where
-     rands@[rand1, rand2, rand3] = take 3 $ Rand.randomRs (-1, 1) (Rand.mkStdGen $ floor $ 1000*rand)::[Double]
-
+     rands@[rand1, rand2, rand3] = randomRanges (take 3 $ map (\n -> fmap (clamp (-1) 1) (n + 0.02, n - 0.02)) oldRands) (Rand.mkStdGen $ floor $ 1000*rand)::[Double]
+     --rands@[rand1, rand2, rand3] = take 3 $ Rand.randomRs (-1, 1) (Rand.mkStdGen $ floor $ 1000*rand)::[Double]
 randomRanges :: (Rand.RandomGen b, Rand.Random a) => [(a, a)] -> b -> [a]
 randomRanges ranges gen = fst $ foldr foldFunc ([], gen) ranges
                           where
@@ -209,7 +212,9 @@ main =
                   --,velTheta = tau/100
                   ,velTheta = 0                              
                   },
-               gripSensors = defaultSensors}
+               gripSensors = defaultSensors
+              , gripRands = repeat 0
+              }
     stepper = foldp step initialGripper input
     config = defaultConfig{
                windowDimensions = (windowWidth, windowHeight),
