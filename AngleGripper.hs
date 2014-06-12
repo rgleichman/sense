@@ -125,8 +125,11 @@ addVelocityNoise rand (linearNoise, angularNoise) oldGripper@Gripper{
              ,gripRands = rands
              }
    where
-     rands@[rand1, rand2, rand3] = randomRanges (take 3 $ map (\n -> fmap (clamp (-1) 1) (n + 0.02, n - 0.02)) oldRands) (Rand.mkStdGen $ floor $ 1000*rand)::[Double]
+     rands@[rand1, rand2, rand3] = randomRanges 
+                                   (take 3 $ map (\n -> fmap (clamp (-1) 1) (n + 0.02, n - 0.02)) oldRands)
+                                   (Rand.mkStdGen $ floor $ 1000*rand)::[Double]
      --rands@[rand1, rand2, rand3] = take 3 $ Rand.randomRs (-1, 1) (Rand.mkStdGen $ floor $ 1000*rand)::[Double]
+
 randomRanges :: (Rand.RandomGen b, Rand.Random a) => [(a, a)] -> b -> [a]
 randomRanges ranges gen = fst $ foldr foldFunc ([], gen) ranges
                           where
